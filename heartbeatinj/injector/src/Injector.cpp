@@ -104,6 +104,23 @@ uintptr_t FindHeartbeatJob(HANDLE process_handle) {
     }
     return 0;
 }
+typedef BOOL(WINAPI* pfnSetProcessValidCallTargets) (HANDLE, PVOID, SIZE_T, ULONG, CFG_CALL_TARGET_INFO*);
+static pfnSetProcessValidCallTargets g_SetProcessValidCallTargets;
+static void ResolveAPIs() {
+    HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+#define R(mod, name) g_##name = (pfn##name)GetProcAddress(mod, #name)
+    R(hKernel32, SetProcessValidCallTargets);
+#undef R
+}
+// creds to veyra or whoever made ts i just pasted it off skidding hq
+static bool BypassCFG(HANDLE hProcess, PVOID tramAddr) {
+    if (!g_SetProcessValidCallTargets) return false;
+    CFG_CALL_TARGET_INFO ci = { 0, CFG_CALL_TARGET_VALID };
+    BOOL ok = g_SetProcessValidCallTargets(hProcess, tramAddr, 22, 1, &ci);
+    std::cout << (ok ? "CFG bypassed for Trampoline!" : "failed to whitelist Trampoline in CFG!")
+        << std::endl;
+    return ok != FALSE;
+}
 unsigned long g_pid = 0;
 unsigned long g_old = 0;
 void* g_process = nullptr;
@@ -166,8 +183,8 @@ int main() {
     std::vector<BYTE> sc = ExtSc((uintptr_t)Hook);
     RepSc(sc, 0x100000000ULL, g_Shared);
     Write(deBase, sc.data(), sc.size());
-
     Write<uintptr_t>(nVab + 8, deBase);
+    BypassCFG(g_process, reinterpret_cast<PVOID>(deBase));
     Shared loc = {};
     loc.OrgHbk = (fHbk)oHbk;
     loc.LdrEx = (fLdrEx)GetProc(kbBase, "LoadLibraryExA");
@@ -177,6 +194,7 @@ int main() {
     loc.Status = State::Load;
     Write(g_Shared, &loc, sizeof(Shared));
     Write<uintptr_t>(hbkJ, nVab);
+    BypassCFG(g_process, reinterpret_cast<PVOID>(nVab));
 
     MODULEENTRY32 msme = {};
     while (!msme.modBaseAddr) {
@@ -195,6 +213,7 @@ int main() {
     mapr::Map(g_DllPath);
     mapr::Inj();
     Write<uintptr_t>(hbkJ, oVab);
+    BypassCFG(g_process, reinterpret_cast<PVOID>(g_DllBase));
 
     return 0;
 }

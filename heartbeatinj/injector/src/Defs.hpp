@@ -1,5 +1,6 @@
 #pragma once
 #include <Windows.h>
+
 using fHbk = uintptr_t(__fastcall*)(uintptr_t, uintptr_t, uintptr_t);
 using fLdrEx = HMODULE(__stdcall*)(LPCSTR, HANDLE, DWORD);
 using fLdr = HMODULE(__stdcall*)(LPCSTR);
@@ -18,6 +19,7 @@ struct Shared {
     fTab AddTab;
     uintptr_t dllSt, dllEd, dllEp, ExcVA, ExcSz, ImpVA, ImpSz, TlsVA, TlsSz;
     State Status;
+    uintptr_t PcmgrInst;
 };
 
 using u8 = unsigned char;
